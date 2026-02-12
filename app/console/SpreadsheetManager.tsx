@@ -177,6 +177,11 @@ export default function SpreadsheetManager() {
     setInjectResult(`Completed: ${String(successCount)} Success, ${String(failCount)} Failed`);
     setInjecting(false);
     await refreshSpreadsheets();
+    setTimeout(() => {
+      setInjectSheet(null);
+      setInjectFiles([]);
+      setInjectResult(null);
+    }, 2000);
   }, [injectSheet, injectFiles, refreshSpreadsheets]);
 
   const clearInjectSelection = useCallback(() => {
