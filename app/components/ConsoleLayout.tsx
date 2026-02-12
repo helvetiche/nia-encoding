@@ -1,25 +1,34 @@
 'use client';
 
-import { GraduationCap, House, MagnifyingGlass, SignOut, Table } from '@phosphor-icons/react';
+import { FileXls, GraduationCap, MagnifyingGlass, Plus, SignOut } from '@phosphor-icons/react';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { ConsoleProvider, useConsole } from '../context/ConsoleContext';
 import Modal from './Modal';
 
 interface ConsoleLayoutProps {
   children: React.ReactNode;
 }
 
-export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
+const SidebarContent = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
-  const pathname = usePathname();
+  const { spreadsheets, loading, selectedId, setSelectedId, openAddSpreadsheet } = useConsole();
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [showTutorial, setShowTutorial] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [userId, setUserId] = useState('');
-  const isHome = pathname === '/console';
-  const isSpreadsheets = pathname === '/spreadsheets';
+
+  const filteredSpreadsheets = useMemo(() => {
+    if (!sidebarSearch.trim()) return spreadsheets;
+    const q = sidebarSearch.toLowerCase().trim();
+    return spreadsheets.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.description ?? '').toLowerCase().includes(q)
+    );
+  }, [spreadsheets, sidebarSearch]);
 
   useEffect(() => {
     setUserEmail(localStorage.getItem('userEmail') ?? '');
@@ -35,7 +44,7 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
 
   return (
     <div className="min-h-screen flex bg-white">
-      <aside className="w-64 min-h-screen bg-emerald-900 flex flex-col">
+      <aside className="w-64 min-h-screen bg-emerald-900 flex flex-col shrink-0">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-2">
             <Image
@@ -51,6 +60,13 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
           </p>
         </div>
         <div className="px-4 mb-4">
+          <button
+            className="w-full flex items-center justify-center gap-2 bg-white/10 border border-white/20 text-white py-2.5 rounded-lg hover:bg-white/20 transition-colors text-sm font-medium mb-4"
+            onClick={openAddSpreadsheet}
+          >
+            <Plus size={18} />
+            Add Spreadsheet
+          </button>
           <div className="relative">
             <MagnifyingGlass
               className="absolute left-3 top-1/2 -translate-y-1/2 text-white"
@@ -65,26 +81,43 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
             />
           </div>
         </div>
-        <nav className="flex-1 px-4 space-y-1">
-          <button
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              isHome ? 'bg-white/10 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white'
-            }`}
-            onClick={() => router.push('/console')}
-          >
-            <House size={20} />
-            Home
-          </button>
-          <button
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-              isSpreadsheets ? 'bg-white/10 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white'
-            }`}
-            onClick={() => router.push('/spreadsheets')}
-          >
-            <Table size={20} />
-            Spreadsheets
-          </button>
-        </nav>
+        <div className="flex-1 overflow-y-auto px-4 space-y-2">
+          {loading ? (
+            <div className="space-y-3 py-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div className="flex gap-3 p-3 rounded-lg bg-white/5" key={i}>
+                  <div className="w-8 h-8 rounded bg-white/20 animate-pulse shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="h-4 w-24 rounded bg-white/20 animate-pulse mb-2" />
+                    <div className="h-3 w-full rounded bg-white/10 animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredSpreadsheets.length === 0 ? (
+            <p className="text-sm text-white/60 py-4">No Spreadsheets Yet</p>
+          ) : (
+            filteredSpreadsheets.map((sheet) => (
+              <button
+                className={`w-full flex items-start gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
+                  selectedId === sheet.id
+                    ? 'bg-white/10 text-white'
+                    : 'text-white/80 hover:bg-white/10 hover:text-white'
+                }`}
+                key={sheet.id}
+                onClick={() => setSelectedId(sheet.id)}
+              >
+                <FileXls className="text-white shrink-0 mt-0.5" size={20} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{sheet.name}</p>
+                  <p className="text-xs text-white/70 truncate mt-0.5">
+                    {sheet.description || 'No description'}
+                  </p>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
         <div className="p-4 border-t border-white/20 space-y-3">
           <div className="bg-white/10 rounded-lg p-4 border border-white/20">
             <p className="text-sm text-white mb-2">Need Help Getting Started?</p>
@@ -151,8 +184,12 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
             <p className="text-emerald-900/90 mb-2">
               Your Excel files must include a file ID in the filename. The system extracts this ID to match rows in the spreadsheet. Format your spreadsheet with column A containing the file IDs that correspond to your Excel filenames.
             </p>
+            <p className="text-emerald-900/90 mb-2">
+              Share your Google Sheet with the service account so it can write data:
+            </p>
             <div className="bg-emerald-900/10 rounded-lg p-4 border border-emerald-900 font-mono text-sm text-emerald-900">
-              <p>Example filename: division10_12345.xlsx (ID: 12345)</p>
+              <p>firebase-adminsdk-fbsvc@nia-encoding.iam.gserviceaccount.com</p>
+              <p className="mt-2 text-emerald-900/80">Example filename: division10_12345.xlsx (ID: 12345)</p>
             </div>
           </section>
 
@@ -176,4 +213,13 @@ export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
       </Modal>
     </div>
   );
+};
+
+export default function ConsoleLayout({ children }: ConsoleLayoutProps) {
+  return (
+    <ConsoleProvider>
+      <SidebarContent>{children}</SidebarContent>
+    </ConsoleProvider>
+  );
 }
+
