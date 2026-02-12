@@ -218,7 +218,7 @@ export default function SpreadsheetManager() {
       </div>
 
       {loading ? (
-        <p className="text-emerald-900 text-sm font-mono">Loading...</p>
+        <SpreadsheetTableSkeleton />
       ) : spreadsheets.length === 0 ? (
         <p className="text-emerald-900 text-sm font-mono">No Spreadsheets Yet</p>
       ) : (

@@ -7,10 +7,11 @@ interface ModalProps {
   children: React.ReactNode;
   isOpen: boolean;
   onClose: () => void;
+  size?: 'default' | 'large';
   title: string;
 }
 
-export default function Modal({ children, isOpen, onClose, title }: ModalProps) {
+export default function Modal({ children, isOpen, onClose, size = 'default', title }: ModalProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -47,7 +48,9 @@ export default function Modal({ children, isOpen, onClose, title }: ModalProps) 
         onClick={onClose}
       />
       <div
-        className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-lg border border-emerald-900"
+        className={`relative z-10 w-full max-h-[90vh] overflow-y-auto bg-white rounded-lg border border-emerald-900 ${
+          size === 'large' ? 'max-w-4xl' : 'max-w-lg'
+        }`}
         role="document"
       >
         <div className="flex items-center justify-between p-4 border-b border-emerald-900">

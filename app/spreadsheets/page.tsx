@@ -223,7 +223,7 @@ export default function SpreadsheetsPage() {
         )}
 
         {loading ? (
-          <p className="text-emerald-900 font-mono">Loading...</p>
+          <SpreadsheetTableSkeleton />
         ) : spreadsheets.length === 0 ? (
           <p className="text-emerald-900 font-mono">No Spreadsheets Yet</p>
         ) : (

@@ -3,17 +3,15 @@ import path from 'node:path';
 
 import admin from 'firebase-admin';
 
-let app: admin.app.App | undefined;
-
-export const getFirebaseAdmin = () => {
-  if (app !== undefined) {
-    return app;
+export const getFirebaseAdmin = (): admin.app.App => {
+  if (admin.apps.length > 0) {
+    return admin.app();
   }
 
   const keyPath = path.join(process.cwd(), 'firebase-service-account.json');
-  
-  let credential;
-  
+
+  let credential: admin.credential.Credential;
+
   if (fs.existsSync(keyPath)) {
     const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8')) as admin.ServiceAccount;
     credential = admin.credential.cert(serviceAccount);
@@ -26,11 +24,9 @@ export const getFirebaseAdmin = () => {
     credential = admin.credential.cert(serviceAccount);
   }
 
-  app = admin.initializeApp({
+  return admin.initializeApp({
     credential,
   });
-
-  return app;
 };
 
 export const verifyFirebaseUser = async (
