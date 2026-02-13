@@ -5,11 +5,20 @@ import { extractData } from "@/lib/dataExtractor";
 import { parseExcelFile } from "@/lib/excelParser";
 import { batchWriteToSheet, readFromSheet } from "@/lib/googleSheets";
 
+/** Build A1 range with optional sheet name. Quote sheet name if it contains spaces. */
+const rangeWithSheet = (sheetName: string | null, range: string): string => {
+  if (!sheetName || sheetName.trim() === "") return range;
+  const needsQuotes = /[\s'"]/.test(sheetName);
+  const escaped = needsQuotes ? `'${sheetName.replace(/'/g, "''")}'` : sheetName;
+  return `${escaped}!${range}`;
+};
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const sheetId = formData.get("sheetId") as string;
+    const tabName = (formData.get("tabName") as string | null)?.trim() || null;
 
     if (!file) {
       return NextResponse.json({ error: "no file uploaded" }, { status: 400 });
@@ -31,6 +40,18 @@ export async function POST(request: NextRequest) {
 
     const extracted = extractData(parsedSheets, file.name);
 
+    if (extracted.soaDetails.length > 0) {
+      const soa = extracted.soaDetails[0];
+      console.log("[upload-excel] extracted SOA:", {
+        area: soa.area,
+        principal: soa.principal,
+        penalty: soa.penalty,
+        oldAccount: soa.oldAccount,
+        total: soa.total,
+        filename: file.name,
+      });
+    }
+
     if (!extracted.fileId) {
       return NextResponse.json(
         { error: "could not extract file id from filename" },
@@ -38,7 +59,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existingData = (await readFromSheet(sheetId, "A:A")) as string[][];
+    const readRange = rangeWithSheet(tabName, "A:A");
+    const existingData = (await readFromSheet(sheetId, readRange)) as string[][];
     let targetRow = -1;
 
     for (const [index, row] of existingData.entries()) {
@@ -55,12 +77,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (targetRow === -1) {
+      const diagnostics = {
+        fileId: extracted.fileId,
+        accountDetailsCount: extracted.accountDetails.length,
+        soaDetailsCount: extracted.soaDetails.length,
+      };
       return NextResponse.json(
-        { error: `no row found for file id ${extracted.fileId}` },
+        {
+          error: `no row found for file id ${extracted.fileId}`,
+          hint: "Ensure column A of the target tab contains matching values (e.g. 1, 01). If your data is in a different tab, pass tabName.",
+          diagnostics,
+        },
         { status: 404 },
       );
     }
 
+    const r = (range: string) => rangeWithSheet(tabName, range);
     const updates: { range: string; values: unknown[][] }[] = [];
 
     if (extracted.accountDetails.length > 0) {
@@ -74,15 +106,8 @@ export async function POST(request: NextRequest) {
         detail.farmer.firstName,
       ];
 
-      console.log("Account detail object:", detail);
-      console.log("Row data array:", rowData);
-      console.log(
-        "Writing to range:",
-        `B${String(targetRow)}:G${String(targetRow)}`,
-      );
-
       updates.push({
-        range: `B${String(targetRow)}:G${String(targetRow)}`,
+        range: r(`B${String(targetRow)}:G${String(targetRow)}`),
         values: [rowData],
       });
     }
@@ -99,7 +124,7 @@ export async function POST(request: NextRequest) {
       ];
 
       updates.push({
-        range: `I${String(targetRow)}:M${String(targetRow)}`,
+        range: r(`I${String(targetRow)}:M${String(targetRow)}`),
         values: [soaData],
       });
     }

@@ -13,6 +13,7 @@ export default function GenerateProfilesModal({
   onClose,
 }: GenerateProfilesModalProps) {
   const [file, setFile] = useState<File | null>(null);
+  const [zipFileName, setZipFileName] = useState("farmer-profiles");
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<null | string>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,7 +46,8 @@ export default function GenerateProfilesModal({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "farmer-profiles.zip";
+      const name = zipFileName.trim() || "farmer-profiles";
+      a.download = name.endsWith(".zip") ? name : `${name}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -61,7 +63,7 @@ export default function GenerateProfilesModal({
     } finally {
       setGenerating(false);
     }
-  }, [file]);
+  }, [file, zipFileName]);
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,6 +127,23 @@ export default function GenerateProfilesModal({
             />
           </div>
 
+          <div>
+            <label
+              className="flex items-center gap-2 text-sm font-medium mb-2 text-emerald-900"
+              htmlFor="zip-name-modal"
+            >
+              Zip File Name
+            </label>
+            <input
+              className="w-full px-4 py-2 border border-emerald-900 rounded-lg text-emerald-900 placeholder-emerald-900/50 focus:ring-2 focus:ring-emerald-900 focus:border-emerald-900"
+              id="zip-name-modal"
+              onChange={(e) => setZipFileName(e.target.value)}
+              placeholder="farmer-profiles"
+              type="text"
+              value={zipFileName}
+            />
+          </div>
+
           <button
             aria-label="Generate farmer profiles from master's list"
             className="flex items-center justify-center gap-2 w-full bg-emerald-900 text-white py-3 rounded-lg hover:bg-emerald-950 disabled:bg-emerald-900/50 disabled:text-white/70 disabled:cursor-not-allowed font-medium transition-colors"
@@ -136,6 +155,21 @@ export default function GenerateProfilesModal({
             <DownloadSimple size={20} />
             {generating ? "Generating..." : "Generate Profiles"}
           </button>
+
+          {generating && (
+            <div
+              aria-label="Generation in progress"
+              className="h-1.5 w-full bg-emerald-900/20 rounded-full overflow-hidden"
+              role="progressbar"
+            >
+              <div
+                className="h-full w-1/3 bg-emerald-900 rounded-full"
+                style={{
+                  animation: "progress-indeterminate 1.5s ease-in-out infinite",
+                }}
+              />
+            </div>
+          )}
 
           {result && (
             <div

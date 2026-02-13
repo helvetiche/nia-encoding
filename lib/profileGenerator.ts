@@ -32,6 +32,9 @@ const formatQueueNumber = (n: number): string => String(n).padStart(2, "0");
 const isValidName = (s: string): boolean =>
   !!s && s.trim() !== "" && s.trim() !== "N";
 
+const sanitizeNoPath = (s: string): string =>
+  s.replace(/[/\\]/g, "-").trim();
+
 const formatFilename = (
   queue: number,
   lotCode: string,
@@ -44,8 +47,9 @@ const formatFilename = (
   const tillerParts = [farmerLast, farmerFirst].filter(isValidName);
   const nameToUse =
     ownerParts.length > 0 ? ownerParts.join(", ") : tillerParts.join(", ");
-  const base = `${formatQueueNumber(queue)} ${lotCode}`.trim();
-  return nameToUse ? `${base} ${nameToUse}.xlsx` : `${base}.xlsx`;
+  const base = `${formatQueueNumber(queue)} ${sanitizeNoPath(lotCode)}`.trim();
+  const name = sanitizeNoPath(nameToUse);
+  return name ? `${base} ${name}.xlsx` : `${base}.xlsx`;
 };
 
 const emptyIfN = (v: string | number): string | number =>
@@ -88,15 +92,38 @@ export const generateProfileBuffer = async (
   setCell(workbook, ACC_SHEET, "C13", farmerLast);
 
   const ifrRows = lotGroup.rows;
+  let principalTotal = 0;
+  let penaltyTotal = 0;
+
   for (let i = 0; i < ifrRows.length; i++) {
     const row = ifrRows[i];
     const rowNum = 30 + i;
     setCell(workbook, ACC_SHEET, `B${rowNum}`, row.cropSeason);
     setCell(workbook, ACC_SHEET, `C${rowNum}`, row.cropYear);
     setCell(workbook, ACC_SHEET, `D${rowNum}`, row.plantedArea);
+
+    const area =
+      typeof row.plantedArea === "number"
+        ? row.plantedArea
+        : parseFloat(String(row.plantedArea ?? "").replace(/,/g, "")) || 0;
+    const rate = String(row.cropSeason ?? "").toUpperCase().endsWith("-D") ? 2550 : 1700;
+    const pctPenalty = 25;
+    const principal = area * rate;
+    const penalty = principal * (pctPenalty / 100);
+    principalTotal += principal;
+    penaltyTotal += penalty;
   }
 
+  const oldAccountNum =
+    typeof oldAccount === "number"
+      ? oldAccount
+      : parseFloat(String(oldAccount ?? "").replace(/,/g, "")) || 0;
+  const total = principalTotal + penaltyTotal + oldAccountNum;
+
+  setCell(workbook, SOA_SHEET, "D100", principalTotal);
+  setCell(workbook, SOA_SHEET, "F100", penaltyTotal);
   setCell(workbook, SOA_SHEET, "G101", oldAccount);
+  setCell(workbook, SOA_SHEET, "G102", total);
 
   const output = await workbook.outputAsync();
   const buffer = Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer);

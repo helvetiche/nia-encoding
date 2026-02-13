@@ -4,7 +4,9 @@ import { FileXls, UploadSimple } from "@phosphor-icons/react";
 import { useCallback, useState } from "react";
 
 interface UploadResponse {
+  diagnostics?: { accountDetailsCount: number; fileId: string; soaDetailsCount: number };
   error?: string;
+  hint?: string;
   rowsWritten?: number;
   sheetName?: string;
   success?: boolean;
@@ -13,6 +15,7 @@ interface UploadResponse {
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [sheetId, setSheetId] = useState("");
+  const [tabName, setTabName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<null | string>(null);
 
@@ -29,6 +32,9 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("sheetId", sheetId);
+      if (tabName.trim()) {
+        formData.append("tabName", tabName.trim());
+      }
 
       const response = await fetch("/api/upload-excel", {
         body: formData,
@@ -43,14 +49,19 @@ export default function UploadPage() {
         );
         setFile(null);
       } else {
-        setResult(`Error: ${data.error ?? "Unknown Error"}`);
+        let msg = `Error: ${data.error ?? "Unknown Error"}`;
+        if (data.hint) msg += `\n\n${data.hint}`;
+        if (data.diagnostics) {
+          msg += `\n\nExtracted: fileId=${data.diagnostics.fileId}, accountDetails=${data.diagnostics.accountDetailsCount}, soaDetails=${data.diagnostics.soaDetailsCount}`;
+        }
+        setResult(msg);
       }
     } catch {
       setResult("Upload Failed - Server Is Broken");
     } finally {
       setUploading(false);
     }
-  }, [file, sheetId]);
+  }, [file, sheetId, tabName]);
 
   return (
     <div className="min-h-screen bg-white p-8">
@@ -72,6 +83,19 @@ export default function UploadPage() {
               placeholder="Paste Your Sheet ID Here"
               type="text"
               value={sheetId}
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium mb-2">
+              Tab Name (Optional)
+            </label>
+            <input
+              className="w-full px-4 py-2 border border-emerald-900 rounded-lg focus:ring-2 focus:ring-emerald-900 focus:border-emerald-900 font-mono"
+              onChange={(e) => setTabName(e.target.value)}
+              placeholder="Leave empty for first sheet"
+              type="text"
+              value={tabName}
             />
           </div>
 
@@ -103,7 +127,7 @@ export default function UploadPage() {
 
           {result && (
             <div
-              className={`p-4 rounded-lg font-mono ${result.toLowerCase().includes("success") ? "bg-emerald-900/10 text-emerald-900 border border-emerald-900" : "bg-emerald-900/10 text-emerald-900 border border-emerald-900"}`}
+              className={`p-4 rounded-lg font-mono whitespace-pre-line ${result.toLowerCase().includes("success") ? "bg-emerald-900/10 text-emerald-900 border border-emerald-900" : "bg-emerald-900/10 text-emerald-900 border border-emerald-900"}`}
             >
               {result}
             </div>

@@ -64,6 +64,7 @@ export default function SpreadsheetManager() {
   } | null>(null);
   const [showInjectSelectModal, setShowInjectSelectModal] = useState(false);
   const [showInjectFileModal, setShowInjectFileModal] = useState(false);
+  const [injectTabName, setInjectTabName] = useState("");
 
   const serviceAccountEmail =
     process.env.NEXT_PUBLIC_SERVICE_ACCOUNT_EMAIL ?? "";
@@ -179,6 +180,7 @@ export default function SpreadsheetManager() {
   const closeInjectModal = useCallback(() => {
     setInjectSheet(null);
     setInjectFiles([]);
+    setInjectTabName("");
     setInjectProgress(0);
     setInjectResult(null);
     setShowInjectFileModal(false);
@@ -231,6 +233,9 @@ export default function SpreadsheetManager() {
           const formDataUpload = new FormData();
           formDataUpload.append("file", file);
           formDataUpload.append("sheetId", sheetId);
+          if (injectTabName.trim()) {
+            formDataUpload.append("tabName", injectTabName.trim());
+          }
 
           const response = await fetch("/api/upload-excel", {
             body: formDataUpload,
@@ -299,7 +304,7 @@ export default function SpreadsheetManager() {
         }, 1000);
       }
     },
-    [injectSheet, injectFiles, refreshSpreadsheets],
+    [injectSheet, injectFiles, injectTabName, refreshSpreadsheets],
   );
 
   const clearInjectSelection = useCallback(() => {
@@ -381,6 +386,21 @@ export default function SpreadsheetManager() {
               </li>
             ))}
           </ul>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1 text-emerald-900">
+              Tab Name (Optional)
+            </label>
+            <input
+              className="w-full border border-emerald-900 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-900 focus:border-emerald-900 font-mono"
+              onChange={(e) => setInjectTabName(e.target.value)}
+              placeholder="Leave empty for first sheet"
+              type="text"
+              value={injectTabName}
+            />
+            <p className="text-xs text-emerald-900/80 mt-1">
+              If your file IDs are in a different tab, enter its exact name
+            </p>
+          </div>
           <div className="flex gap-2 mb-4">
             <label className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-emerald-900 text-emerald-900 py-2 rounded-lg cursor-pointer hover:bg-emerald-900/5 transition-colors text-sm font-medium">
               <Plus size={16} />
