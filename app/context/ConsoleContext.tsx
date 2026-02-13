@@ -1,6 +1,13 @@
-'use client';
+"use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 export interface Spreadsheet {
   id: string;
@@ -32,7 +39,7 @@ const ConsoleContext = createContext<ConsoleContextValue | null>(null);
 export const useConsole = () => {
   const ctx = useContext(ConsoleContext);
   if (!ctx) {
-    throw new Error('useConsole must be used within ConsoleLayout');
+    throw new Error("useConsole must be used within ConsoleLayout");
   }
   return ctx;
 };
@@ -45,7 +52,8 @@ export const ConsoleProvider = ({ children }: ConsoleProviderProps) => {
   const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]);
   const [loading, setLoading] = useState(true);
   const [popoverSheetId, setPopoverSheetId] = useState<string | null>(null);
-  const [spreadsheetActions, setSpreadsheetActions] = useState<SpreadsheetActions | null>(null);
+  const [spreadsheetActions, setSpreadsheetActions] =
+    useState<SpreadsheetActions | null>(null);
   const openAddSpreadsheetRef = useRef<(() => void) | null>(null);
 
   const registerOpenAddSpreadsheet = useCallback((fn: () => void) => {
@@ -56,13 +64,16 @@ export const ConsoleProvider = ({ children }: ConsoleProviderProps) => {
     openAddSpreadsheetRef.current?.();
   }, []);
 
-  const registerSpreadsheetActions = useCallback((actions: SpreadsheetActions) => {
-    setSpreadsheetActions(actions);
-  }, []);
+  const registerSpreadsheetActions = useCallback(
+    (actions: SpreadsheetActions) => {
+      setSpreadsheetActions(actions);
+    },
+    [],
+  );
 
   const refreshSpreadsheets = useCallback(async () => {
     try {
-      const response = await fetch('/api/spreadsheets');
+      const response = await fetch("/api/spreadsheets");
       const data = (await response.json()) as { data: Spreadsheet[] };
       if (response.ok) {
         setSpreadsheets(data.data);
@@ -91,8 +102,6 @@ export const ConsoleProvider = ({ children }: ConsoleProviderProps) => {
   };
 
   return (
-    <ConsoleContext.Provider value={value}>
-      {children}
-    </ConsoleContext.Provider>
+    <ConsoleContext.Provider value={value}>{children}</ConsoleContext.Provider>
   );
 };

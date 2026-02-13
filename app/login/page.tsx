@@ -1,30 +1,30 @@
-'use client';
+"use client";
 
-import { EnvelopeSimple, LockKey } from '@phosphor-icons/react';
-import { useRouter } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { EnvelopeSimple, LockKey } from "@phosphor-icons/react";
+import { useRouter } from "next/navigation";
+import { useCallback, useState } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const login = useCallback(async () => {
     if (!email || !password) {
-      setError('Please Enter Email And Password');
+      setError("Please Enter Email And Password");
       return;
     }
 
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch("/api/auth/login", {
         body: JSON.stringify({ email, password }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
       });
 
       const data = (await response.json()) as {
@@ -35,19 +35,19 @@ export default function LoginPage() {
       };
 
       if (response.ok && data.success) {
-        localStorage.setItem('authenticated', 'true');
+        localStorage.setItem("authenticated", "true");
         if (data.email) {
-          localStorage.setItem('userEmail', data.email);
+          localStorage.setItem("userEmail", data.email);
         }
         if (data.userId) {
-          localStorage.setItem('userId', data.userId);
+          localStorage.setItem("userId", data.userId);
         }
-        router.push('/console');
+        router.push("/console");
       } else {
-        setError(data.error ?? 'Login Failed');
+        setError(data.error ?? "Login Failed");
       }
     } catch {
-      setError('Server Is Broken');
+      setError("Server Is Broken");
     } finally {
       setLoading(false);
     }
@@ -56,8 +56,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <div className="bg-white rounded-lg p-8 w-full max-w-md border border-emerald-900">
-        <h1 className="text-2xl font-medium mb-6 text-center text-emerald-900">Login</h1>
-        
+        <h1 className="text-2xl font-medium mb-6 text-center text-emerald-900">
+          Login
+        </h1>
+
         <div className="space-y-4">
           <div>
             <label className="flex items-center gap-2 text-sm font-medium mb-2 text-emerald-900">
@@ -86,7 +88,7 @@ export default function LoginPage() {
                 setPassword(e.target.value);
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   void login();
                 }
               }}
@@ -109,7 +111,7 @@ export default function LoginPage() {
               void login();
             }}
           >
-            {loading ? 'Logging In...' : 'Login'}
+            {loading ? "Logging In..." : "Login"}
           </button>
         </div>
       </div>

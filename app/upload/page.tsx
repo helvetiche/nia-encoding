@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { FileXls, UploadSimple } from '@phosphor-icons/react';
-import { useCallback, useState } from 'react';
+import { FileXls, UploadSimple } from "@phosphor-icons/react";
+import { useCallback, useState } from "react";
 
 interface UploadResponse {
   error?: string;
@@ -12,39 +12,41 @@ interface UploadResponse {
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [sheetId, setSheetId] = useState('');
+  const [sheetId, setSheetId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<null | string>(null);
 
   const uploadFile = useCallback(async () => {
     if (!file || !sheetId) {
-      setResult('Please Select A File And Enter Sheet ID');
+      setResult("Please Select A File And Enter Sheet ID");
       return;
     }
 
     setUploading(true);
-    setResult('Uploading...');
+    setResult("Uploading...");
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('sheetId', sheetId);
+      formData.append("file", file);
+      formData.append("sheetId", sheetId);
 
-      const response = await fetch('/api/upload-excel', {
+      const response = await fetch("/api/upload-excel", {
         body: formData,
-        method: 'POST',
+        method: "POST",
       });
 
       const data = (await response.json()) as UploadResponse;
 
       if (response.ok) {
-        setResult(`Success! Wrote ${String(data.rowsWritten ?? 0)} Rows To Sheet "${data.sheetName ?? 'Unknown'}"`);
+        setResult(
+          `Success! Wrote ${String(data.rowsWritten ?? 0)} Rows To Sheet "${data.sheetName ?? "Unknown"}"`,
+        );
         setFile(null);
       } else {
-        setResult(`Error: ${data.error ?? 'Unknown Error'}`);
+        setResult(`Error: ${data.error ?? "Unknown Error"}`);
       }
     } catch {
-      setResult('Upload Failed - Server Is Broken');
+      setResult("Upload Failed - Server Is Broken");
     } finally {
       setUploading(false);
     }
@@ -53,8 +55,10 @@ export default function UploadPage() {
   return (
     <div className="min-h-screen bg-white p-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-medium mb-8 text-emerald-900">Upload Excel to Google Sheets</h1>
-        
+        <h1 className="text-3xl font-medium mb-8 text-emerald-900">
+          Upload Excel to Google Sheets
+        </h1>
+
         <div className="space-y-6">
           <div>
             <label className="flex items-center gap-2 text-sm font-medium mb-2">
@@ -94,11 +98,13 @@ export default function UploadPage() {
             }}
           >
             <UploadSimple size={20} />
-            {uploading ? 'Uploading...' : 'Upload To Google Sheets'}
+            {uploading ? "Uploading..." : "Upload To Google Sheets"}
           </button>
 
           {result && (
-            <div className={`p-4 rounded-lg font-mono ${result.toLowerCase().includes('success') ? 'bg-emerald-900/10 text-emerald-900 border border-emerald-900' : 'bg-emerald-900/10 text-emerald-900 border border-emerald-900'}`}>
+            <div
+              className={`p-4 rounded-lg font-mono ${result.toLowerCase().includes("success") ? "bg-emerald-900/10 text-emerald-900 border border-emerald-900" : "bg-emerald-900/10 text-emerald-900 border border-emerald-900"}`}
+            >
               {result}
             </div>
           )}
