@@ -10,12 +10,14 @@ import {
   SignOut,
   Syringe,
   Trash,
+  FileArrowDown,
 } from "@phosphor-icons/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ConsoleProvider, useConsole } from "../context/ConsoleContext";
+import GenerateProfilesModal from "./GenerateProfilesModal";
 import Modal from "./Modal";
 
 interface ConsoleLayoutProps {
@@ -35,6 +37,7 @@ const SidebarContent = ({ children }: { children: React.ReactNode }) => {
   } = useConsole();
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [userId, setUserId] = useState("");
 
@@ -90,6 +93,14 @@ const SidebarContent = ({ children }: { children: React.ReactNode }) => {
           </p>
         </div>
         <div className="px-4 mb-4">
+          <button
+            className="w-full flex items-center justify-center gap-2 bg-white/10 border border-white/20 text-white py-2.5 rounded-lg hover:bg-white/20 transition-colors text-sm font-medium mb-2"
+            onClick={() => setShowGenerateModal(true)}
+            type="button"
+          >
+            <FileArrowDown size={18} />
+            Generate Profiles
+          </button>
           <button
             className="w-full flex items-center justify-center gap-2 bg-white/10 border border-white/20 text-white py-2.5 rounded-lg hover:bg-white/20 transition-colors text-sm font-medium mb-4"
             onClick={openAddSpreadsheet}
@@ -329,6 +340,11 @@ const SidebarContent = ({ children }: { children: React.ReactNode }) => {
           </section>
         </div>
       </Modal>
+
+      <GenerateProfilesModal
+        isOpen={showGenerateModal}
+        onClose={() => setShowGenerateModal(false)}
+      />
     </div>
   );
 };
