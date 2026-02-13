@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 import { extractData } from '@/lib/dataExtractor';
 import { parseExcelFile } from '@/lib/excelParser';
-import { readFromSheet, writeToSheet } from '@/lib/googleSheets';
+import { batchWriteToSheet, readFromSheet } from '@/lib/googleSheets';
 
 export async function POST(request: NextRequest) {
   try {
@@ -106,10 +106,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    for (const update of updates) {
-      console.log('Executing write:', update);
-      const result = await writeToSheet(sheetId, update.range, update.values);
-      console.log('Write result:', result);
+    if (updates.length > 0) {
+      await batchWriteToSheet(sheetId, updates);
     }
 
     return NextResponse.json({
@@ -118,6 +116,15 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('upload error:', error);
+    const err = error as { code?: number; response?: { status?: number }; message?: string };
+    const status = err?.code ?? err?.response?.status;
+    const isRateLimit = status === 429 || err?.message?.includes('Quota exceeded') || err?.message?.includes('429');
+    if (isRateLimit) {
+      return NextResponse.json(
+        { error: 'quota_exceeded', message: 'Rate limit exceeded. Please retry later.' },
+        { status: 429 }
+      );
+    }
     return NextResponse.json(
       { error: 'server is broken' },
       { status: 500 }

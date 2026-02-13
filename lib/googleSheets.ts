@@ -32,15 +32,37 @@ export const getSheets = () => {
 
 export const writeToSheet = async (sheetId: string, range: string, values: unknown[][]) => {
   const sheets = getSheets();
-  
+
   const response = await sheets.spreadsheets.values.update({
     range,
     requestBody: { values },
     spreadsheetId: sheetId,
-    valueInputOption: 'RAW',
+    valueInputOption: 'USER_ENTERED',
   });
 
   return response.data;
+};
+
+export const batchWriteToSheet = async (
+  sheetId: string,
+  updates: { range: string; values: unknown[][] }[]
+): Promise<void> => {
+  if (updates.length === 0) return;
+
+  const sheets = getSheets();
+
+  const data = updates.map(({ range, values }) => ({
+    range,
+    values,
+  }));
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data,
+    },
+  });
 };
 
 export const readFromSheet = async (sheetId: string, range: string) => {

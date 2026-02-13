@@ -1,9 +1,9 @@
 'use client';
 
-import { FileXls, GraduationCap, MagnifyingGlass, Plus, SignOut } from '@phosphor-icons/react';
+import { FileXls, GraduationCap, Link, MagnifyingGlass, PencilSimple, Plus, SignOut, Syringe, Trash } from '@phosphor-icons/react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ConsoleProvider, useConsole } from '../context/ConsoleContext';
 import Modal from './Modal';
@@ -14,11 +14,23 @@ interface ConsoleLayoutProps {
 
 const SidebarContent = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
-  const { spreadsheets, loading, selectedId, setSelectedId, openAddSpreadsheet } = useConsole();
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const { spreadsheets, loading, popoverSheetId, setPopoverSheetId, openAddSpreadsheet, spreadsheetActions } = useConsole();
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [showTutorial, setShowTutorial] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [userId, setUserId] = useState('');
+
+  useEffect(() => {
+    if (!popoverSheetId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
+        setPopoverSheetId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [popoverSheetId, setPopoverSheetId]);
 
   const filteredSpreadsheets = useMemo(() => {
     if (!sidebarSearch.trim()) return spreadsheets;
@@ -44,7 +56,7 @@ const SidebarContent = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="min-h-screen flex bg-white">
-      <aside className="w-64 min-h-screen bg-emerald-900 flex flex-col shrink-0">
+      <aside className="w-64 min-h-screen bg-emerald-900 flex flex-col shrink-0" ref={sidebarRef}>
         <div className="p-6">
           <div className="flex items-center gap-3 mb-2">
             <Image
@@ -98,23 +110,77 @@ const SidebarContent = ({ children }: { children: React.ReactNode }) => {
             <p className="text-sm text-white/60 py-4">No Spreadsheets Yet</p>
           ) : (
             filteredSpreadsheets.map((sheet) => (
-              <button
-                className={`w-full flex items-start gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
-                  selectedId === sheet.id
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/80 hover:bg-white/10 hover:text-white'
-                }`}
-                key={sheet.id}
-                onClick={() => setSelectedId(sheet.id)}
-              >
-                <FileXls className="text-white shrink-0 mt-0.5" size={20} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{sheet.name}</p>
-                  <p className="text-xs text-white/70 truncate mt-0.5">
-                    {sheet.description || 'No description'}
-                  </p>
-                </div>
-              </button>
+              <div className="relative" key={sheet.id}>
+                <button
+                  className={`w-full flex items-start gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
+                    popoverSheetId === sheet.id
+                      ? 'bg-white/10 text-white'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPopoverSheetId(popoverSheetId === sheet.id ? null : sheet.id);
+                  }}
+                >
+                  <FileXls className="text-white shrink-0 mt-0.5" size={20} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{sheet.name}</p>
+                    <p className="text-xs text-white/70 truncate mt-0.5">
+                      {sheet.description || 'No description'}
+                    </p>
+                  </div>
+                </button>
+                {popoverSheetId === sheet.id && spreadsheetActions && (
+                  <div
+                    className="absolute left-0 top-full mt-1 z-50 min-w-[140px] bg-white border border-emerald-900 rounded-lg shadow-lg py-1"
+                    role="menu"
+                  >
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-emerald-900 hover:bg-emerald-900/10 transition-colors text-left"
+                      onClick={() => {
+                        spreadsheetActions.onInject(sheet);
+                        setPopoverSheetId(null);
+                      }}
+                      role="menuitem"
+                    >
+                      <Syringe size={16} />
+                      Inject
+                    </button>
+                    <a
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-emerald-900 hover:bg-emerald-900/10 transition-colors text-left"
+                      href={sheet.url}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                      onClick={() => setPopoverSheetId(null)}
+                    >
+                      <Link size={16} />
+                      Open
+                    </a>
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-emerald-900 hover:bg-emerald-900/10 transition-colors text-left"
+                      onClick={() => {
+                        spreadsheetActions.onEdit(sheet);
+                        setPopoverSheetId(null);
+                      }}
+                      role="menuitem"
+                    >
+                      <PencilSimple size={16} />
+                      Edit
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
+                      onClick={() => {
+                        spreadsheetActions.onDelete(sheet.id);
+                        setPopoverSheetId(null);
+                      }}
+                      role="menuitem"
+                    >
+                      <Trash size={16} />
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
             ))
           )}
         </div>

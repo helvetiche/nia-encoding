@@ -9,14 +9,22 @@ export interface Spreadsheet {
   url: string;
 }
 
+export interface SpreadsheetActions {
+  onInject: (sheet: Spreadsheet) => void;
+  onEdit: (sheet: Spreadsheet) => void;
+  onDelete: (id: string) => void;
+}
+
 interface ConsoleContextValue {
   spreadsheets: Spreadsheet[];
   loading: boolean;
-  selectedId: string | null;
-  setSelectedId: (id: string | null) => void;
+  popoverSheetId: string | null;
+  setPopoverSheetId: (id: string | null) => void;
   refreshSpreadsheets: () => Promise<void>;
   registerOpenAddSpreadsheet: (fn: () => void) => void;
   openAddSpreadsheet: () => void;
+  registerSpreadsheetActions: (actions: SpreadsheetActions) => void;
+  spreadsheetActions: SpreadsheetActions | null;
 }
 
 const ConsoleContext = createContext<ConsoleContextValue | null>(null);
@@ -36,7 +44,8 @@ interface ConsoleProviderProps {
 export const ConsoleProvider = ({ children }: ConsoleProviderProps) => {
   const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [popoverSheetId, setPopoverSheetId] = useState<string | null>(null);
+  const [spreadsheetActions, setSpreadsheetActions] = useState<SpreadsheetActions | null>(null);
   const openAddSpreadsheetRef = useRef<(() => void) | null>(null);
 
   const registerOpenAddSpreadsheet = useCallback((fn: () => void) => {
@@ -45,6 +54,10 @@ export const ConsoleProvider = ({ children }: ConsoleProviderProps) => {
 
   const openAddSpreadsheet = useCallback(() => {
     openAddSpreadsheetRef.current?.();
+  }, []);
+
+  const registerSpreadsheetActions = useCallback((actions: SpreadsheetActions) => {
+    setSpreadsheetActions(actions);
   }, []);
 
   const refreshSpreadsheets = useCallback(async () => {
@@ -68,11 +81,13 @@ export const ConsoleProvider = ({ children }: ConsoleProviderProps) => {
   const value: ConsoleContextValue = {
     spreadsheets,
     loading,
-    selectedId,
-    setSelectedId,
+    popoverSheetId,
+    setPopoverSheetId,
     refreshSpreadsheets,
     registerOpenAddSpreadsheet,
     openAddSpreadsheet,
+    registerSpreadsheetActions,
+    spreadsheetActions,
   };
 
   return (

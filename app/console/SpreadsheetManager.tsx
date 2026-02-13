@@ -1,7 +1,7 @@
 'use client';
 
-import { FileXls, Link, PencilSimple, Plus, Syringe, Trash } from '@phosphor-icons/react';
-import { useCallback, useEffect, useState } from 'react';
+import { CheckCircle, FileXls, Plus, Syringe, Trash, Warning, XCircle } from '@phosphor-icons/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useConsole, type Spreadsheet } from '../context/ConsoleContext';
 import Modal from '../components/Modal';
@@ -11,9 +11,14 @@ const extractSheetIdFromUrl = (url: string): string | null => {
   return match ? match[1] : null;
 };
 
+const sortFilesByName = (files: File[]): File[] => {
+  return [...files].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+  );
+};
+
 export default function SpreadsheetManager() {
-  const { spreadsheets, selectedId, setSelectedId, refreshSpreadsheets, registerOpenAddSpreadsheet } = useConsole();
-  const selectedSheet = spreadsheets.find((s) => s.id === selectedId) ?? null;
+  const { spreadsheets, refreshSpreadsheets, registerOpenAddSpreadsheet, registerSpreadsheetActions } = useConsole();
 
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ description: '', name: '', url: '' });
@@ -24,6 +29,13 @@ export default function SpreadsheetManager() {
   const [injecting, setInjecting] = useState(false);
   const [injectProgress, setInjectProgress] = useState(0);
   const [injectResult, setInjectResult] = useState<null | string>(null);
+  const [currentInjectFile, setCurrentInjectFile] = useState<string | null>(null);
+  const [injectEtaSeconds, setInjectEtaSeconds] = useState<number | null>(null);
+  const [rateLimitedFiles, setRateLimitedFiles] = useState<File[]>([]);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+  const retryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [completionStats, setCompletionStats] = useState<{ success: number; failed: number; skipped: number } | null>(null);
   const [showInjectSelectModal, setShowInjectSelectModal] = useState(false);
   const [showInjectFileModal, setShowInjectFileModal] = useState(false);
 
@@ -98,8 +110,18 @@ export default function SpreadsheetManager() {
     setInjectFiles([]);
     setInjectProgress(0);
     setInjectResult(null);
+    setRateLimitedFiles([]);
+    setRetryCountdown(null);
     setShowInjectFileModal(true);
   }, []);
+
+  useEffect(() => {
+    registerSpreadsheetActions({
+      onInject: openInjectModal,
+      onEdit: editSheet,
+      onDelete: deleteSheet,
+    });
+  }, [registerSpreadsheetActions, openInjectModal, editSheet, deleteSheet]);
 
   const handleInjectFileClick = useCallback(() => {
     setShowInjectSelectModal(true);
@@ -123,14 +145,18 @@ export default function SpreadsheetManager() {
     setShowInjectFileModal(false);
   }, []);
 
-  const handleInjectFilesSelected = useCallback((files: File[]) => {
-    setInjectFiles(files);
+  const handleInjectFilesSelected = useCallback((files: File[], append = false) => {
+    setInjectFiles((prev) => {
+      const next = append ? [...prev, ...files] : files;
+      return sortFilesByName(next);
+    });
     setInjectResult(null);
-    setShowInjectFileModal(false);
+    if (!append) setShowInjectFileModal(false);
   }, []);
 
-  const injectExcel = useCallback(async () => {
-    if (!injectSheet || injectFiles.length === 0) {
+  const injectExcel = useCallback(async (filesToInject?: File[], isRetry = false) => {
+    const files = filesToInject ?? injectFiles;
+    if (!injectSheet || files.length === 0) {
       return;
     }
 
@@ -141,15 +167,22 @@ export default function SpreadsheetManager() {
     }
 
     setInjecting(true);
-    setInjectResult('');
+    setInjectResult(isRetry ? 'Retrying skipped files...' : '');
     setInjectProgress(0);
+    setRateLimitedFiles([]);
+    setCurrentInjectFile(null);
+    setInjectEtaSeconds(null);
 
-    const total = injectFiles.length;
+    const total = files.length;
     let successCount = 0;
     let failCount = 0;
+    const skipped: File[] = [];
+    const secondsPerFile = 1;
 
-    for (let i = 0; i < injectFiles.length; i++) {
-      const file = injectFiles[i];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setCurrentInjectFile(file.name);
+      setInjectEtaSeconds((total - i - 1) * secondsPerFile);
 
       try {
         const formDataUpload = new FormData();
@@ -165,6 +198,8 @@ export default function SpreadsheetManager() {
 
         if (response.ok) {
           successCount++;
+        } else if (response.status === 429) {
+          skipped.push(file);
         } else {
           failCount++;
         }
@@ -173,22 +208,75 @@ export default function SpreadsheetManager() {
       }
 
       setInjectProgress(Math.round(((i + 1) / total) * 100));
+
+      if (i < files.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
     }
-    setInjectResult(`Completed: ${String(successCount)} Success, ${String(failCount)} Failed`);
+
+    setCurrentInjectFile(null);
+    setInjectEtaSeconds(null);
+    setRateLimitedFiles(skipped);
+    setCompletionStats({ success: successCount, failed: failCount, skipped: skipped.length });
+    setShowCompletionModal(true);
+    setInjectResult(
+      skipped.length > 0 && !isRetry
+        ? `Completed: ${String(successCount)} Success, ${String(failCount)} Failed. ${String(skipped.length)} skipped (rate limit). Auto-retry in 65s...`
+        : `Completed: ${String(successCount)} Success, ${String(failCount)} Failed${skipped.length > 0 ? `, ${String(skipped.length)} Skipped (Rate Limit)` : ''}`
+    );
     setInjecting(false);
     await refreshSpreadsheets();
-    setTimeout(() => {
-      setInjectSheet(null);
-      setInjectFiles([]);
-      setInjectResult(null);
-    }, 2000);
+
+    if (skipped.length === 0) {
+      setTimeout(() => {
+        setInjectSheet(null);
+        setInjectFiles([]);
+        setInjectResult(null);
+      }, 2000);
+    } else if (!isRetry && skipped.length > 0) {
+      setRetryCountdown(65);
+      if (retryIntervalRef.current) clearInterval(retryIntervalRef.current);
+      retryIntervalRef.current = setInterval(() => {
+        setRetryCountdown((prev) => {
+          if (prev === null || prev <= 1) {
+            if (retryIntervalRef.current) {
+              clearInterval(retryIntervalRef.current);
+              retryIntervalRef.current = null;
+            }
+            setRetryCountdown(null);
+            setTimeout(() => void injectExcel(skipped, true), 0);
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
   }, [injectSheet, injectFiles, refreshSpreadsheets]);
 
   const clearInjectSelection = useCallback(() => {
+    if (retryIntervalRef.current) {
+      clearInterval(retryIntervalRef.current);
+      retryIntervalRef.current = null;
+    }
     setInjectSheet(null);
     setInjectFiles([]);
     setInjectResult(null);
+    setRateLimitedFiles([]);
+    setRetryCountdown(null);
+    setShowCompletionModal(false);
+    setCompletionStats(null);
   }, []);
+
+  const handleCloseCompletionModal = useCallback(() => {
+    setShowCompletionModal(false);
+    setCompletionStats(null);
+  }, []);
+
+  const handleRetryRateLimited = useCallback(() => {
+    if (rateLimitedFiles.length > 0 && injectSheet) {
+      void injectExcel(rateLimitedFiles, true);
+    }
+  }, [rateLimitedFiles, injectSheet, injectExcel]);
 
   return (
     <div className="p-8">
@@ -225,7 +313,7 @@ export default function SpreadsheetManager() {
               Clear
             </button>
           </div>
-          <ul className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+          <ul className="space-y-2 mb-4 max-h-64 overflow-y-auto">
             {injectFiles.map((f, i) => (
               <li key={i} className="flex items-center gap-2 text-sm text-emerald-900">
                 <FileXls size={16} />
@@ -233,6 +321,25 @@ export default function SpreadsheetManager() {
               </li>
             ))}
           </ul>
+          <div className="flex gap-2 mb-4">
+            <label className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-emerald-900 text-emerald-900 py-2 rounded-lg cursor-pointer hover:bg-emerald-900/5 transition-colors text-sm font-medium">
+              <Plus size={16} />
+              Add More Files
+              <input
+                accept=".xlsx,.xls"
+                className="hidden"
+                multiple
+                onChange={(e) => {
+                  const fileList = e.target.files;
+                  if (fileList && fileList.length > 0) {
+                    handleInjectFilesSelected(Array.from(fileList), true);
+                  }
+                  e.target.value = '';
+                }}
+                type="file"
+              />
+            </label>
+          </div>
           <div className="space-y-3">
             <button
               className="flex items-center justify-center gap-2 w-full bg-emerald-900 text-white py-3 rounded-lg font-medium hover:bg-emerald-950 disabled:bg-emerald-900/50 disabled:text-white/70 disabled:cursor-not-allowed transition-colors"
@@ -244,71 +351,56 @@ export default function SpreadsheetManager() {
             </button>
             {injecting && (
               <div className="space-y-2">
-                <div className="h-2 w-full bg-emerald-900/20 rounded-full overflow-hidden">
+                <div className="h-2.5 w-full bg-emerald-900/20 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-900 transition-all duration-300 ease-out"
                     style={{ width: `${injectProgress}%` }}
                   />
                 </div>
-                <p className="text-sm font-mono text-emerald-900 text-center">{injectProgress}%</p>
+                <div className="flex justify-between items-center text-sm text-emerald-900">
+                  <span className="font-mono font-medium">{injectProgress}%</span>
+                  {injectEtaSeconds !== null && injectEtaSeconds > 0 && (
+                    <span className="text-emerald-900/80">~{String(injectEtaSeconds)}s remaining</span>
+                  )}
+                </div>
+                {currentInjectFile && (
+                  <p className="text-xs text-emerald-900/80 truncate font-mono" title={currentInjectFile}>
+                    Scanning: {currentInjectFile}
+                  </p>
+                )}
               </div>
             )}
             {injectResult && (
               <div className="p-4 rounded-lg bg-emerald-900/10 text-emerald-900 border border-emerald-900">
                 {injectResult}
+                {retryCountdown !== null && retryCountdown > 0 && (
+                  <p className="mt-2 text-sm font-mono font-medium">
+                    Retrying in {String(retryCountdown)}s...
+                  </p>
+                )}
+              </div>
+            )}
+            {rateLimitedFiles.length > 0 && (
+              <div className="space-y-3 p-4 rounded-lg border border-amber-500 bg-amber-50">
+                <p className="text-sm font-medium text-amber-900">Skipped Due To Rate Limit ({rateLimitedFiles.length} Files)</p>
+                <p className="text-xs text-amber-800">These files were skipped because the Google Sheets API quota was exceeded. Wait a minute and retry.</p>
+                <ul className="max-h-32 overflow-y-auto space-y-1 text-sm text-amber-900 font-mono">
+                  {rateLimitedFiles.map((f, i) => (
+                    <li key={i}>• {f.name}</li>
+                  ))}
+                </ul>
+                <button
+                  className="w-full flex items-center justify-center gap-2 bg-amber-600 text-white py-2 rounded-lg font-medium hover:bg-amber-700 transition-colors text-sm"
+                  disabled={injecting}
+                  onClick={handleRetryRateLimited}
+                >
+                  <Syringe size={18} />
+                  Retry Skipped Files
+                </button>
               </div>
             )}
           </div>
         </div>
-      )}
-
-      {selectedSheet ? (
-        <div className="border border-emerald-900 rounded-lg overflow-hidden bg-white p-6">
-          <div className="flex items-start gap-4 mb-4">
-            <FileXls className="text-emerald-900 shrink-0" size={32} />
-            <div>
-              <h3 className="text-lg font-medium text-emerald-900">{selectedSheet.name}</h3>
-              {selectedSheet.description && (
-                <p className="text-sm text-emerald-900/80 mt-1 font-mono">{selectedSheet.description}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="flex items-center gap-1 px-4 py-2 rounded-lg bg-emerald-900 text-white text-sm font-medium hover:bg-emerald-950 transition-colors"
-              onClick={() => openInjectModal(selectedSheet)}
-              title="Inject Excel"
-            >
-              <Syringe size={16} />
-              Inject
-            </button>
-            <a
-              className="flex items-center gap-1 px-4 py-2 rounded-lg border-2 border-emerald-900 text-emerald-900 text-sm font-medium hover:bg-emerald-900 hover:text-white transition-colors"
-              href={selectedSheet.url}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              <Link size={16} />
-              Open
-            </a>
-            <button
-              className="flex items-center gap-1 px-4 py-2 rounded-lg border-2 border-emerald-900 text-emerald-900 text-sm font-medium hover:bg-emerald-900 hover:text-white transition-colors"
-              onClick={() => editSheet(selectedSheet)}
-            >
-              <PencilSimple size={16} />
-              Edit
-            </button>
-            <button
-              className="flex items-center gap-1 px-4 py-2 rounded-lg border-2 border-red-600 text-red-600 text-sm font-medium hover:bg-red-600 hover:text-white transition-colors"
-              onClick={() => void deleteSheet(selectedSheet.id)}
-            >
-              <Trash size={16} />
-              Delete
-            </button>
-          </div>
-        </div>
-      ) : (
-        <p className="text-emerald-900 text-sm font-mono">Select A Spreadsheet From The Sidebar</p>
       )}
 
       <Modal
@@ -446,6 +538,40 @@ export default function SpreadsheetManager() {
               }}
               type="file"
             />
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={showCompletionModal}
+        onClose={handleCloseCompletionModal}
+        title="Injection Complete"
+      >
+        {completionStats && (
+          <div className="space-y-4">
+            <p className="text-sm text-emerald-900/90">Summary of the injection session:</p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-900/10 border border-emerald-900">
+                <CheckCircle className="text-emerald-900 shrink-0" size={24} />
+                <span className="text-emerald-900 font-medium">{completionStats.success} Success</span>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+                <XCircle className="text-red-600 shrink-0" size={24} />
+                <span className="text-red-700 font-medium">{completionStats.failed} Failed</span>
+              </div>
+              {completionStats.skipped > 0 && (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <Warning className="text-amber-600 shrink-0" size={24} />
+                  <span className="text-amber-800 font-medium">{completionStats.skipped} Skipped (Rate Limit)</span>
+                </div>
+              )}
+            </div>
+            <button
+              className="w-full bg-emerald-900 text-white py-2.5 rounded-lg font-medium hover:bg-emerald-950 transition-colors"
+              onClick={handleCloseCompletionModal}
+            >
+              OK
+            </button>
           </div>
         )}
       </Modal>
